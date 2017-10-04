@@ -232,6 +232,16 @@ def walk_posix_integration_targets(include_hidden=False):
             yield target
 
 
+def walk_aix_integration_targets(include_hidden=False):
+    """
+    :type include_hidden: bool
+    :rtype: collections.Iterable[IntegrationTarget]
+    """
+    for target in walk_integration_targets():
+        if 'aix/' in target.aliases or (include_hidden and 'hidden/aix/' in target.aliases):
+            yield target
+
+
 def walk_network_integration_targets(include_hidden=False):
     """
     :type include_hidden: bool
@@ -239,6 +249,7 @@ def walk_network_integration_targets(include_hidden=False):
     """
     for target in walk_integration_targets():
         if 'network/' in target.aliases or (include_hidden and 'hidden/network/' in target.aliases):
+            print(target)
             yield target
 
 
@@ -465,6 +476,7 @@ class TestTarget(CompletionTarget):
 class IntegrationTarget(CompletionTarget):
     """Integration test target."""
     non_posix = frozenset((
+        'aix',
         'network',
         'windows',
     ))

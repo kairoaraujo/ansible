@@ -162,6 +162,21 @@ class PosixIntegrationConfig(IntegrationConfig):
         super(PosixIntegrationConfig, self).__init__(args, 'integration')
 
 
+class AixIntegrationConfig(IntegrationConfig):
+    """Configuration for the AIX integration command."""
+
+    def __init__(self, args):
+        """
+        :type args: any
+        """
+        super(AixIntegrationConfig, self).__init__(args, 'aix-integration')
+
+        self.aix = args.aix  # type: list [str]
+
+        if self.aix:
+            self.allow_destructive = True
+
+
 class WindowsIntegrationConfig(IntegrationConfig):
     """Configuration for the windows integration command."""
 

@@ -20,6 +20,7 @@ from lib.delegation import (
 
 from lib.executor import (
     command_posix_integration,
+    command_aix_integration,
     command_network_integration,
     command_windows_integration,
     command_units,
@@ -36,6 +37,7 @@ from lib.executor import (
 from lib.config import (
     IntegrationConfig,
     PosixIntegrationConfig,
+    AixIntegrationConfig,
     WindowsIntegrationConfig,
     NetworkIntegrationConfig,
     SanityConfig,
@@ -53,6 +55,7 @@ from lib.sanity import (
 from lib.target import (
     find_target_completion,
     walk_posix_integration_targets,
+    walk_aix_integration_targets,
     walk_network_integration_targets,
     walk_windows_integration_targets,
     walk_units_targets,
@@ -247,6 +250,18 @@ def parse_args():
 
     add_extra_docker_options(posix_integration)
 
+    aix_integration = subparsers.add_parser('aix-integration',
+                                                parents=[integration],
+                                                help='aix integration tests')
+
+    aix_integration.set_defaults(func=command_aix_integration,
+                                     targets=walk_aix_integration_targets,
+                                     config=AixIntegrationConfig)
+
+    aix_integration.add_argument('--inventory',
+                                     metavar='PATH',
+                                     help='path to inventory used for tests')
+
     network_integration = subparsers.add_parser('network-integration',
                                                 parents=[integration],
                                                 help='network integration tests')
@@ -263,6 +278,8 @@ def parse_args():
     network_integration.add_argument('--inventory',
                                      metavar='PATH',
                                      help='path to inventory used for tests')
+
+
 
     windows_integration = subparsers.add_parser('windows-integration',
                                                 parents=[integration],
@@ -626,7 +643,6 @@ def complete_docker(prefix, parsed_args, **_):
         images = completion_fd.read().splitlines()
 
     return [i for i in images if i.startswith(prefix)]
-
 
 def complete_windows(prefix, parsed_args, **_):
     """

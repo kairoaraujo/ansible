@@ -27,6 +27,7 @@ from lib.core_ci import (
 )
 
 from lib.manage_ci import (
+    ManagePosixCI,
     ManageWindowsCI,
     ManageNetworkCI,
 )
@@ -62,6 +63,7 @@ from lib.target import (
     walk_external_targets,
     walk_internal_targets,
     walk_posix_integration_targets,
+    walk_aix_integration_targets,
     walk_network_integration_targets,
     walk_windows_integration_targets,
     walk_units_targets,
@@ -91,6 +93,7 @@ from lib.config import (
     ShellConfig,
     UnitsConfig,
     WindowsIntegrationConfig,
+    AixIntegrationConfig,
 )
 
 from lib.test import (
@@ -249,6 +252,104 @@ def command_posix_integration(args):
     all_targets = tuple(walk_posix_integration_targets(include_hidden=True))
     internal_targets = command_integration_filter(args, all_targets)
     command_integration_filtered(args, internal_targets, all_targets)
+
+
+def command_aix_integration(args):
+    """
+    :type args: AixIntegrationConfig
+    """
+    filename = 'test/integration/inventory.aixremote'
+    print(filename)
+
+    if not args.explain and not os.path.isfile(filename):
+        raise ApplicationError('Provide an inventory file (see %s.template).' % filename)
+
+    all_targets = tuple(walk_aix_integration_targets(include_hidden=True))
+    internal_targets = command_integration_filter(args, all_targets)
+
+    if args.aix:
+        instances = []  # type: list [lib.thread.WrappedThread]
+        for version in args.aix:
+            instance = lib.thread.WrappedThread(functools.partial(aix_run, args, version))
+            instance.daemon = True
+            instance.start()
+            instances.append(instance)
+
+        install_command_requirements(args)
+
+        while any(instance.is_alive() for instance in instances):
+            time.sleep(1)
+
+        remotes = [instance.wait_for_result() for instance in instances]
+        inventory = aix_inventory(remotes)
+
+        display.info('>>> Inventory: %s\n%s' % (filename, inventory.strip()), verbosity=3)
+
+        if not args.explain:
+            with open(filename, 'w') as inventory_fd:
+                inventory_fd.write(inventory)
+    else:
+        install_command_requirements(args)
+
+    try:
+        command_integration_filtered(args, internal_targets, all_targets)
+    finally:
+        pass
+
+
+def aix_run(args, platform, version):
+    """
+    :type args: NetworkIntegrationConfig
+    :type platform: str
+    :type version: str
+    :rtype: AnsibleCoreCI
+    """
+
+    core_ci = AnsibleCoreCI(args, platform, version, stage=args.remote_stage)
+    core_ci.start()
+    core_ci.wait()
+
+    manage = ManagePosixCI(core_ci)
+    manage.wait()
+
+    return core_ci
+
+
+def aix_inventory(remotes):
+    """
+    :type remotes: list[AnsibleCoreCI]
+    :rtype: str
+    """
+    groups = dict([(remote.platform, []) for remote in remotes])
+
+    for remote in remotes:
+        options = dict(
+            ansible_host=remote.connection.hostname,
+            ansible_user=remote.connection.username,
+            ansible_ssh_private_key_file=remote.ssh_key.key,
+            ansible_connection='local'
+        )
+
+        groups[remote.platform].append(
+            '%s %s' % (
+                remote.name.replace('.', '-'),
+                ' '.join('%s="%s"' % (k, options[k]) for k in sorted(options)),
+            )
+        )
+
+    template = ''
+
+    for group in groups:
+        hosts = '\n'.join(groups[group])
+
+        template += textwrap.dedent("""
+        [%s]
+        %s
+        """) % (group, hosts)
+
+    inventory = template
+
+    return inventory
 
 
 def command_network_integration(args):
@@ -753,7 +854,11 @@ def command_integration_role(args, target, start_at_task):
 
     vars_file = 'integration_config.yml'
 
-    if isinstance(args, WindowsIntegrationConfig):
+    if isinstance(args, AixIntegrationConfig):
+        inventory = 'inventory.aixremote'
+        hosts = 'aix'
+        gather_facts = False
+    elif isinstance(args, WindowsIntegrationConfig):
         inventory = 'inventory.winrm'
         hosts = 'windows'
         gather_facts = False
